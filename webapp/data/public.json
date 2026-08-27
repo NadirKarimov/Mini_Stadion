@@ -1,0 +1,9 @@
+{
+  "stadium_name": "Mini Stadion",
+  "address": "",
+  "hourly_price": 60000,
+  "hourly_price_text": "60 000",
+  "open_min": 360,
+  "close_min": 1440,
+  "days": {}
+}
