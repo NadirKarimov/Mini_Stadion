@@ -1,0 +1,52 @@
+{
+  "stadium_name": "Mini Stadion",
+  "address": "Manzil hali kiritilmagan",
+  "hourly_price": 60000,
+  "hourly_price_text": "60 000",
+  "open_min": 360,
+  "close_min": 1440,
+  "days": {
+    "2026-08-27": {
+      "occupied": []
+    },
+    "2026-08-28": {
+      "occupied": []
+    },
+    "2026-08-29": {
+      "occupied": []
+    },
+    "2026-08-30": {
+      "occupied": []
+    },
+    "2026-08-31": {
+      "occupied": []
+    },
+    "2026-09-01": {
+      "occupied": []
+    },
+    "2026-09-02": {
+      "occupied": []
+    },
+    "2026-09-03": {
+      "occupied": []
+    },
+    "2026-09-04": {
+      "occupied": []
+    },
+    "2026-09-05": {
+      "occupied": []
+    },
+    "2026-09-06": {
+      "occupied": []
+    },
+    "2026-09-07": {
+      "occupied": []
+    },
+    "2026-09-08": {
+      "occupied": []
+    },
+    "2026-09-09": {
+      "occupied": []
+    }
+  }
+}

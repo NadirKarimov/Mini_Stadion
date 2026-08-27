@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Mini Stadion</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">⚽</div>
+      <div>
+        <h1 id="stadiumName">Mini Stadion</h1>
+        <p id="stadiumAddr" class="muted">Yuklanmoqda…</p>
+      </div>
+    </div>
+    <div class="price-chip" id="priceChip">1 soat — — so'm</div>
+  </header>
+
+  <div class="calendar-wrap">
+    <div class="cal-head">
+      <button type="button" class="cal-nav" id="calPrev" aria-label="Oldingi oy">‹</button>
+      <h2 id="calTitle">Kalendar</h2>
+      <button type="button" class="cal-nav" id="calNext" aria-label="Keyingi oy">›</button>
+    </div>
+    <div class="cal-weekdays" id="calWeekdays"></div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
+
+  <div class="legend">
+    <span><i class="dot gray"></i> O'tib ketgan</span>
+    <span><i class="dot green"></i> Bo'sh</span>
+    <span><i class="dot blue"></i> Qisman</span>
+    <span><i class="dot red"></i> Band</span>
+    <span><i class="dot orange"></i> Kutilmoqda</span>
+  </div>
+
+  <section class="sheet">
+    <div class="sheet-head">
+      <h2 id="dayTitle">Vaqtlar</h2>
+      <p class="hint">Soatni bosing yoki pastdan oralig'ini tanlang</p>
+    </div>
+    <div class="hours" id="hours"></div>
+  </section>
+
+  <section class="book-panel" id="bookPanel">
+    <div class="pickers">
+      <label>
+        Dan
+        <select id="startSel"></select>
+      </label>
+      <div class="arrow">→</div>
+      <label>
+        Gacha
+        <select id="endSel"></select>
+      </label>
+    </div>
+    <div class="summary" id="summary">
+      Vaqt oralig'ini tanlang
+    </div>
+    <button type="button" class="cta" id="bookBtn" disabled>Bron qilish</button>
+  </section>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <div class="modal" id="okModal" hidden>
+    <div class="modal-card">
+      <div class="ok-icon">✅</div>
+      <h3>Bron yaratildi</h3>
+      <p id="okText"></p>
+      <p class="muted">Botga o'ting: kartaga pul o'tkazib, skrinshot yuboring. Admin tasdiqlagach vaqt qizil bo'ladi.</p>
+      <button type="button" class="cta" id="closeBtn">Botga qaytish</button>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
