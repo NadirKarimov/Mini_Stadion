@@ -5,6 +5,7 @@
     tg.expand();
     tg.setHeaderColor("#07140e");
     tg.setBackgroundColor("#07140e");
+    if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation();
   }
 
   const DAYS = ["Yak", "Du", "Se", "Cho", "Pay", "Ju", "Sha"];
@@ -26,6 +27,7 @@
     slots: null,
     start: null,
     end: null,
+    pendingStart: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -47,15 +49,35 @@
     return hour * 60 + minute;
   }
 
+  function queryParam(name) {
+    try {
+      return new URLSearchParams(location.search).get(name) || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
   function isGithubPages() {
     return location.hostname.endsWith("github.io");
   }
 
   function apiBase() {
-    const manual = String(CFG.apiBase || "").trim().replace(/\/$/, "");
+    const manual = (queryParam("api") || String(CFG.apiBase || "")).trim().replace(/\/$/, "");
     if (manual) return manual;
     if (isGithubPages()) return null;
     return "";
+  }
+
+  function botUsername() {
+    const fromSnap = state.snapshot && state.snapshot.bot_username;
+    return (
+      queryParam("bot") ||
+      String(CFG.botUsername || "") ||
+      String(fromSnap || "") ||
+      "Mini_Stadion_bronbot"
+    )
+      .trim()
+      .replace(/^@/, "");
   }
 
   function githubRepo() {
@@ -85,21 +107,37 @@
     return merged.reduce((sum, [a, b]) => sum + (b - a), 0);
   }
 
+  function normalizeOccupied(list) {
+    return (list || [])
+      .map((b) => ({
+        start_min: Number(b.start_min),
+        end_min: Number(b.end_min),
+        status: String(b.status || "confirmed"),
+      }))
+      .filter((b) => b.end_min > b.start_min)
+      .filter((b) => b.status !== "cancelled" && b.status !== "rejected");
+  }
+
   function hourColor(hour, bookings, closeMin) {
     const start = hour * 60;
     let end = hour * 60 + 60;
     if (closeMin != null) end = Math.min(end, closeMin);
     const available = Math.max(0, end - start);
     if (available <= 0) return "green";
-    const confirmed = bookings.filter((b) => b.status === "confirmed").map((b) => [b.start_min, b.end_min]);
-    const pending = bookings
-      .filter((b) => b.status === "pending_payment" || b.status === "pending_review")
-      .map((b) => [b.start_min, b.end_min]);
+    const list = normalizeOccupied(bookings);
+    const confirmed = [];
+    const pending = [];
+    for (const b of list) {
+      const s = b.status;
+      if (s === "cancelled" || s === "rejected") continue;
+      if (s === "pending_payment" || s === "pending_review") pending.push([b.start_min, b.end_min]);
+      else confirmed.push([b.start_min, b.end_min]);
+    }
     const bookedMins = occupiedMinutes(confirmed, start, end);
     const pendingMins = occupiedMinutes(pending, start, end);
     if (bookedMins >= available) return "red";
-    if (pendingMins > 0) return "orange";
-    if (bookedMins > 0) return "blue";
+    if (pendingMins >= available) return "orange";
+    if (bookedMins > 0 || pendingMins > 0) return "blue";
     return "green";
   }
 
@@ -187,25 +225,105 @@
     return data;
   }
 
+  async function fetchJson(url, extraHeaders) {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache", ...(extraHeaders || {}) },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && typeof data.content === "string" && data.encoding === "base64") {
+      const bin = atob(data.content.replace(/\s/g, ""));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+    }
+    if (data && data.days && typeof data.days === "object") return data;
+    throw new Error("JSON emas");
+  }
+
   async function loadSnapshot() {
     const repo = githubRepo();
     const branch = CFG.githubBranch || "main";
+    const stamp = Date.now();
     const urls = [];
     if (repo) {
-      urls.push(`https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${Date.now()}`);
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${stamp}`, remote: true });
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/data/public.json?t=${stamp}`, remote: true });
+      urls.push({
+        url: `https://api.github.com/repos/${repo}/contents/webapp/data/public.json?ref=${branch}&t=${stamp}`,
+        headers: { Accept: "application/vnd.github+json" },
+        remote: true,
+      });
+      urls.push({
+        url: `https://api.github.com/repos/${repo}/contents/data/public.json?ref=${branch}&t=${stamp}`,
+        headers: { Accept: "application/vnd.github+json" },
+        remote: true,
+      });
     }
-    urls.push(`./data/public.json?t=${Date.now()}`);
+    urls.push({ url: `./data/public.json?t=${stamp}`, remote: false });
+    urls.push({ url: `./webapp/data/public.json?t=${stamp}`, remote: false });
     let lastErr = "Bron ma'lumoti yuklanmadi";
-    for (const url of urls) {
+    const remote = [];
+    const local = [];
+    for (const item of urls) {
       try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (res.ok) return await res.json();
-        lastErr = `HTTP ${res.status}`;
+        const data = await fetchJson(item.url, item.headers);
+        if (data && data.days && typeof data.days === "object") {
+          (item.remote ? remote : local).push(data);
+        }
       } catch (err) {
         lastErr = err.message || lastErr;
       }
     }
-    throw new Error(lastErr);
+    const pool = remote.concat(local);
+    if (!pool.length) throw new Error(lastErr);
+    return pickSnapshot(pool);
+  }
+
+  function occupancyCount(snap) {
+    return Object.values((snap && snap.days) || {}).reduce(
+      (n, d) => n + (((d && d.occupied) || []).length),
+      0
+    );
+  }
+
+  function snapshotTime(snap) {
+    return Date.parse((snap && snap.updated_at) || "") || 0;
+  }
+
+  function pickSnapshot(pool) {
+    pool.sort((a, b) => {
+      const ta = snapshotTime(a);
+      const tb = snapshotTime(b);
+      const oa = occupancyCount(a);
+      const ob = occupancyCount(b);
+      const aliveA = oa > 0 || ta > 0 ? 1 : 0;
+      const aliveB = ob > 0 || tb > 0 ? 1 : 0;
+      if (aliveB !== aliveA) return aliveB - aliveA;
+      if (tb !== ta) return tb - ta;
+      return ob - oa;
+    });
+    const newest = pool[0];
+    const richest = pool.slice().sort((a, b) => {
+      const d = occupancyCount(b) - occupancyCount(a);
+      return d !== 0 ? d : snapshotTime(b) - snapshotTime(a);
+    })[0];
+    if (occupancyCount(newest) === 0 && occupancyCount(richest) > 0 && snapshotTime(newest) <= snapshotTime(richest)) {
+      return richest;
+    }
+    return newest;
+  }
+
+  function mergeIncomingSnapshot(incoming) {
+    const current = state.snapshot;
+    if (!current) return incoming;
+    const oIn = occupancyCount(incoming);
+    const oCur = occupancyCount(current);
+    if (oIn === 0 && oCur > 0 && snapshotTime(incoming) <= snapshotTime(current)) {
+      return { ...incoming, days: current.days, updated_at: current.updated_at };
+    }
+    return incoming;
   }
 
   function snapshotToConfig(snap) {
@@ -217,6 +335,7 @@
       hourly_price_text: snap.hourly_price_text,
       open_min: snap.open_min,
       close_min: snap.close_min,
+      work_days: snap.work_days || [0, 1, 2, 3, 4, 5, 6],
       today,
       now_min: tashkentNowMin(),
       days: snap.days || {},
@@ -236,6 +355,29 @@
     return ceil30(nowMin) >= h.end_min;
   }
 
+  function workDays() {
+    const raw =
+      (state.config && state.config.work_days) ||
+      (state.snapshot && state.snapshot.work_days) ||
+      [0, 1, 2, 3, 4, 5, 6];
+    if (Array.isArray(raw)) return raw.map(Number);
+    return String(raw)
+      .split(",")
+      .map((n) => Number(n.trim()))
+      .filter((n) => n >= 0 && n <= 6);
+  }
+
+  function weekdayMon0(dateStr) {
+    const d = parseYmd(dateStr);
+    return (d.getDay() + 6) % 7;
+  }
+
+  function dateIsRest(dateStr) {
+    const days = workDays();
+    if (!days.length) return false;
+    return !days.includes(weekdayMon0(dateStr));
+  }
+
   function dateFullyPast(date) {
     return effectiveNowMin(date) >= 24 * 60;
   }
@@ -244,13 +386,45 @@
     const snap = state.snapshot || {};
     const openMin = Number(snap.open_min || 0);
     const closeMin = Number(snap.close_min || 1440);
-    const occupied = ((snap.days || {})[date] || {}).occupied || [];
+    const occupied = normalizeOccupied(((snap.days || {})[date] || {}).occupied || []);
     return {
       date,
       open_min: openMin,
       close_min: closeMin,
       now_min: effectiveNowMin(date),
       hourly_price: Number(snap.hourly_price || 0),
+      hours: buildHours(openMin, closeMin, occupied),
+      occupied,
+    };
+  }
+
+  function applyLocalBooking() {
+    if (state.start == null || state.end == null || !state.date) return;
+    const occ = {
+      start_min: Number(state.start),
+      end_min: Number(state.end),
+      status: "pending_payment",
+    };
+    if (!state.snapshot) state.snapshot = { days: {}, open_min: 360, close_min: 1440 };
+    if (!state.snapshot.days) state.snapshot.days = {};
+    if (!state.snapshot.days[state.date]) state.snapshot.days[state.date] = { occupied: [] };
+    state.snapshot.days[state.date].occupied = normalizeOccupied(
+      (state.snapshot.days[state.date].occupied || []).concat([occ])
+    );
+    state.snapshot.updated_at = new Date().toISOString();
+    state.slots = slotsFromSnapshot(state.date);
+  }
+
+  function paintSlots(payload) {
+    const openMin = Number(payload.open_min || 0);
+    const closeMin = Number(payload.close_min || 1440);
+    const occupied = normalizeOccupied(payload.occupied || []);
+    state.slots = {
+      date: payload.date || state.date,
+      open_min: openMin,
+      close_min: closeMin,
+      now_min: effectiveNowMin(state.date),
+      hourly_price: Number(payload.hourly_price || 0),
       hours: buildHours(openMin, closeMin, occupied),
       occupied,
     };
@@ -306,17 +480,45 @@
       const past = key < today;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "cal-day" + (key === state.date ? " active" : "") + (past ? " past" : "") + (key === today ? " today" : "");
+      const rest = !past && dateIsRest(key);
+      const busy = past || rest ? "" : dayOccupancyColor(key);
+      btn.className =
+        "cal-day" +
+        (key === state.date ? " active" : "") +
+        (past ? " past" : "") +
+        (rest ? " rest" : "") +
+        (key === today ? " today" : "") +
+        (busy ? ` ${busy}` : "");
       btn.textContent = String(day);
       btn.addEventListener("click", () => {
         state.date = key;
         state.start = null;
         state.end = null;
         renderDates();
+        if (dateIsRest(key) && key >= today) toast("Bu kun dam olish — bron qilib bo'lmaydi");
         loadSlots();
       });
       grid.appendChild(btn);
     }
+  }
+
+  const HOUR_PAINT = {
+    green: { bg: "rgba(34,197,94,0.34)", fg: "#dcfce7", bar: "#22c55e" },
+    blue: { bg: "rgba(37,99,235,0.5)", fg: "#dbeafe", bar: "#3b82f6" },
+    red: { bg: "rgba(220,38,38,0.52)", fg: "#fecaca", bar: "#ef4444" },
+    orange: { bg: "rgba(234,88,12,0.55)", fg: "#ffedd5", bar: "#f97316" },
+    past: { bg: "#2a2d2b", fg: "#9ca3af", bar: "#6b7280" },
+  };
+
+  function dayOccupancyColor(date) {
+    const occupied = normalizeOccupied((((state.snapshot || {}).days || {})[date] || {}).occupied || []);
+    if (!occupied.length) return "";
+    const closeMin = Number((state.snapshot && state.snapshot.close_min) || 1440);
+    const colors = new Set(occupied.map((b) => hourColor(Math.floor(b.start_min / 60), occupied, closeMin)));
+    if (colors.has("red")) return "busy-red";
+    if (colors.has("orange")) return "busy-orange";
+    if (colors.has("blue")) return "busy-blue";
+    return "busy-blue";
   }
 
   function colorLabel(color) {
@@ -326,22 +528,32 @@
   function renderHours() {
     const box = $("hours");
     box.innerHTML = "";
+    const d = parseYmd(state.date);
+    $("dayTitle").textContent = `${DAYS_FULL[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+    if (dateIsRest(state.date) && !dateFullyPast(state.date)) {
+      box.innerHTML = "<p class='muted'>Dam olish kuni — bron qilib bo'lmaydi</p>";
+      return;
+    }
     const nowMin = effectiveNowMin(state.date);
     const start = state.start;
     const end = state.end;
     const fullyPast = dateFullyPast(state.date);
-    for (const h of state.slots.hours) {
+    for (const h of (state.slots && state.slots.hours) || []) {
       const past = fullyPast || isHourPast(h, nowMin);
+      const color = past ? "past" : h.color;
+      const paint = HOUR_PAINT[color] || HOUR_PAINT.green;
       const inRange = !past && start != null && end != null && h.start_min < end && start < h.end_min;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `hour ${past ? "past" : h.color}${inRange ? " in-range" : ""}`;
+      btn.className = `hour ${color}${inRange ? " in-range" : ""}`;
+      btn.setAttribute("data-color", color);
+      btn.style.background = paint.bg;
+      btn.style.color = paint.fg;
+      btn.style.boxShadow = `inset 5px 0 0 ${paint.bar}`;
       btn.innerHTML = `<div class="t">${h.label}</div><div class="s">${past ? "O'tib ketgan" : colorLabel(h.color)}</div>`;
       btn.addEventListener("click", () => onHourClick(h, past));
       box.appendChild(btn);
     }
-    const d = parseYmd(state.date);
-    $("dayTitle").textContent = `${DAYS_FULL[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
   }
 
   function firstFreeStart(hourStart, hourEnd) {
@@ -356,7 +568,19 @@
   }
 
   function onHourClick(h, past) {
-    if (past || h.color === "red" || h.color === "orange") return;
+    if (past) return;
+    if (dateIsRest(state.date)) {
+      toast("Bu kun dam olish — bron qilib bo'lmaydi");
+      return;
+    }
+    if (h.color === "red") {
+      toast("Bu soat band. Boshqa vaqt tanlang.");
+      return;
+    }
+    if (h.color === "orange") {
+      toast("Bu soat kutilmoqda. Boshqa vaqt tanlang yoki admin bilan bog'laning.");
+      return;
+    }
     const start = firstFreeStart(h.start_min, h.end_min);
     if (start == null) {
       toast("Bu soatda bron qilish uchun bo'sh 30 daqiqa yo'q");
@@ -458,6 +682,14 @@
       $("endSel").disabled = true;
       return;
     }
+    if (dateIsRest(state.date)) {
+      box.innerHTML = "Dam olish kuni — bron qilib bo'lmaydi";
+      btn.disabled = true;
+      btn.textContent = "Bron qilish";
+      $("startSel").disabled = true;
+      $("endSel").disabled = true;
+      return;
+    }
     $("startSel").disabled = false;
     $("endSel").disabled = false;
     if (state.start == null || state.end == null) {
@@ -476,37 +708,86 @@
   }
 
   async function loadSlots() {
-    $("hours").innerHTML = "<p class='muted'>Yuklanmoqda…</p>";
+    const first = !$("hours").querySelector(".hour");
+    if (first) $("hours").innerHTML = "<p class='muted'>Yuklanmoqda…</p>";
     try {
       if (apiBase() === null) {
+        try {
+          const snap = mergeIncomingSnapshot(await loadSnapshot());
+          state.snapshot = snap;
+          if (state.config) {
+            state.config.hourly_price = snap.hourly_price;
+            state.config.hourly_price_text = snap.hourly_price_text;
+            state.config.open_min = snap.open_min;
+            state.config.close_min = snap.close_min;
+            state.config.work_days = snap.work_days || state.config.work_days;
+            state.config.days = snap.days || {};
+          }
+        } catch (err) {
+          if (!state.snapshot) throw err;
+        }
         state.slots = slotsFromSnapshot(state.date);
+        if (dateIsRest(state.date)) {
+          state.slots.hours = [];
+          state.slots.occupied = [];
+          state.slots.rest = true;
+        }
       } else {
-        state.slots = await api(`/api/slots?date=${state.date}`);
-        state.slots.now_min = effectiveNowMin(state.date);
+        const payload = await api(`/api/slots?date=${state.date}`);
+        paintSlots(payload);
+        if (payload.rest) {
+          $("hours").innerHTML = "<p class='muted'>Dam olish kuni — bron qilib bo'lmaydi</p>";
+          fillStartSelect();
+          fillEndSelect();
+          updateSummary();
+          renderDates();
+          return;
+        }
       }
       fillStartSelect();
       fillEndSelect();
       updateSummary();
       renderHours();
+      renderDates();
     } catch (err) {
       $("hours").innerHTML = `<p class="muted">${err.message}</p>`;
     }
   }
 
-  function bookViaTelegram() {
-    if (!tg || typeof tg.sendData !== "function") {
-      throw new Error("Pastdagi «🏟️ Bron qilish» tugmasidan oching — shunda bron botga ketadi.");
-    }
-    tg.sendData(JSON.stringify({
+  function showOk(title, hint, btnText) {
+    const titleEl = $("okTitle");
+    const hintEl = $("okHint");
+    if (titleEl) titleEl.textContent = title;
+    if (hintEl) hintEl.textContent = hint;
+    $("closeBtn").textContent = btnText;
+    $("okModal").hidden = false;
+  }
+
+  function sendBookingToBot() {
+    applyLocalBooking();
+    renderHours();
+    updateSummary();
+    const ymd = String(state.date).replace(/-/g, "");
+    const payload = `b${ymd}-${state.start}-${state.end}-t${Date.now() % 1000000}`;
+    const data = JSON.stringify({
       date: state.date,
       start_min: state.start,
       end_min: state.end,
-    }));
-    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    });
+    const bot = botUsername();
+    const link = bot ? `https://t.me/${bot}?start=${payload}` : "";
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
     $("okText").textContent =
       `${displayRange(state.start, state.end)}  ·  ${durationText(state.start, state.end)}  ·  ${formatSum(Math.round((state.slots.hourly_price || 0) * (state.end - state.start) / 60))} so'm`;
-    $("okModal").hidden = false;
-    setTimeout(() => { try { tg.close(); } catch (e) {} }, 1200);
+    showOk("Bron yuborildi", "Botga o'ting — to'lov ko'rsatmasi keladi. Admin ham xabar oladi.", "Botga o'tish");
+    state.pendingStart = payload;
+    if (link) {
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(link);
+      else window.location.href = link;
+    }
+    try {
+      if (tg && typeof tg.sendData === "function") tg.sendData(data);
+    } catch (err) {}
   }
 
   async function book() {
@@ -515,34 +796,51 @@
       toast("Faqat oldindagi kun va vaqtni bron qilish mumkin");
       return;
     }
+    if (dateIsRest(state.date)) {
+      toast("Bu kun dam olish — bron qilib bo'lmaydi");
+      return;
+    }
     const nowMin = effectiveNowMin(state.date);
     if (nowMin >= 0 && state.start < ceil30(nowMin)) {
       toast("Faqat oldindagi vaqtni bron qilish mumkin");
       return;
     }
+    if (overlaps(state.start, state.end, (state.slots && state.slots.occupied) || [])) {
+      toast("Bu vaqt band yoki kutilmoqda. Boshqa vaqt tanlang.");
+      return;
+    }
     const btn = $("bookBtn");
     btn.disabled = true;
+    state.pendingStart = null;
     try {
-      if (apiBase() === null) {
-        bookViaTelegram();
+      if (apiBase() !== null) {
+        const res = await api("/api/book", {
+          method: "POST",
+          body: JSON.stringify({
+            date: state.date,
+            start_min: state.start,
+            end_min: state.end,
+          }),
+        });
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        $("okText").textContent =
+          `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
+        showOk(
+          "Bron yaratildi",
+          "Kartaga pul o'tkazib, skrinshot yuboring.",
+          "Davom etish"
+        );
+        applyLocalBooking();
+        await loadSlots();
         return;
       }
-      const res = await api("/api/book", {
-        method: "POST",
-        body: JSON.stringify({
-          date: state.date,
-          start_min: state.start,
-          end_min: state.end,
-        }),
-      });
-      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-      $("okText").textContent =
-        `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
-      $("okModal").hidden = false;
+      sendBookingToBot();
     } catch (err) {
-      toast(err.message);
-      btn.disabled = false;
-      loadSlots();
+      const raw = String(err && err.message ? err.message : err);
+      toast(raw || "Bron qilinmadi. Qayta urinib ko'ring.");
+      try { loadSlots(); } catch (e) {}
+    } finally {
+      updateSummary();
     }
   }
 
@@ -559,8 +857,20 @@
   });
   $("bookBtn").addEventListener("click", book);
   $("closeBtn").addEventListener("click", () => {
-    if (tg) tg.close();
-    else $("okModal").hidden = true;
+    $("okModal").hidden = true;
+    const payload = state.pendingStart;
+    const bot = botUsername();
+    if (payload && bot) {
+      const link = `https://t.me/${bot}?start=${payload}`;
+      state.pendingStart = null;
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(link);
+      else window.open(link, "_blank");
+      return;
+    }
+    if (payload && !bot) {
+      toast(`/start ${payload}`);
+    }
+    state.pendingStart = null;
   });
   $("calPrev").addEventListener("click", () => {
     const todayDt = parseYmd(state.config.today);
@@ -598,6 +908,9 @@
       state.date = state.config.today;
       renderDates();
       await loadSlots();
+      setInterval(() => {
+        if (document.visibilityState === "visible") loadSlots();
+      }, 8000);
     } catch (err) {
       $("stadiumAddr").textContent = err.message;
     }
