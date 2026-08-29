@@ -5,7 +5,7 @@
   "hourly_price_text": "60 000",
   "open_min": 360,
   "close_min": 1440,
-  "bot_username": "",
+  "bot_username": "Mini_Stadion_bronbot",
   "work_days": [
     0,
     1,
@@ -15,10 +15,21 @@
     5,
     6
   ],
-  "updated_at": "2026-08-29T06:11:24.266164+05:00",
+  "updated_at": "2026-08-29T06:16:39.157849+05:00",
   "days": {
     "2026-08-29": {
-      "occupied": [],
+      "occupied": [
+        {
+          "start_min": 540,
+          "end_min": 630,
+          "status": "confirmed"
+        },
+        {
+          "start_min": 840,
+          "end_min": 900,
+          "status": "pending_review"
+        }
+      ],
       "hours": [
         {
           "hour": 6,
@@ -46,14 +57,14 @@
           "start_min": 540,
           "end_min": 600,
           "label": "09:00/09:59",
-          "color": "green"
+          "color": "red"
         },
         {
           "hour": 10,
           "start_min": 600,
           "end_min": 660,
           "label": "10:00/10:59",
-          "color": "green"
+          "color": "blue"
         },
         {
           "hour": 11,
@@ -81,7 +92,7 @@
           "start_min": 840,
           "end_min": 900,
           "label": "14:00/14:59",
-          "color": "green"
+          "color": "orange"
         },
         {
           "hour": 15,
