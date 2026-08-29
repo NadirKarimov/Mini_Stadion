@@ -290,6 +290,7 @@
       hourly_price_text: snap.hourly_price_text,
       open_min: snap.open_min,
       close_min: snap.close_min,
+      work_days: snap.work_days || [0, 1, 2, 3, 4, 5, 6],
       today,
       now_min: tashkentNowMin(),
       days: snap.days || {},
@@ -307,6 +308,29 @@
     if (nowMin < 0) return false;
     if (nowMin >= h.end_min) return true;
     return ceil30(nowMin) >= h.end_min;
+  }
+
+  function workDays() {
+    const raw =
+      (state.config && state.config.work_days) ||
+      (state.snapshot && state.snapshot.work_days) ||
+      [0, 1, 2, 3, 4, 5, 6];
+    if (Array.isArray(raw)) return raw.map(Number);
+    return String(raw)
+      .split(",")
+      .map((n) => Number(n.trim()))
+      .filter((n) => n >= 0 && n <= 6);
+  }
+
+  function weekdayMon0(dateStr) {
+    const d = parseYmd(dateStr);
+    return (d.getDay() + 6) % 7;
+  }
+
+  function dateIsRest(dateStr) {
+    const days = workDays();
+    if (!days.length) return false;
+    return !days.includes(weekdayMon0(dateStr));
   }
 
   function dateFullyPast(date) {
@@ -410,11 +434,13 @@
       const past = key < today;
       const btn = document.createElement("button");
       btn.type = "button";
-      const busy = past ? "" : dayOccupancyColor(key);
+      const rest = !past && dateIsRest(key);
+      const busy = past || rest ? "" : dayOccupancyColor(key);
       btn.className =
         "cal-day" +
         (key === state.date ? " active" : "") +
         (past ? " past" : "") +
+        (rest ? " rest" : "") +
         (key === today ? " today" : "") +
         (busy ? ` ${busy}` : "");
       btn.textContent = String(day);
@@ -423,6 +449,7 @@
         state.start = null;
         state.end = null;
         renderDates();
+        if (dateIsRest(key) && key >= today) toast("Bu kun dam olish — bron qilib bo'lmaydi");
         loadSlots();
       });
       grid.appendChild(btn);
@@ -455,11 +482,17 @@
   function renderHours() {
     const box = $("hours");
     box.innerHTML = "";
+    const d = parseYmd(state.date);
+    $("dayTitle").textContent = `${DAYS_FULL[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
+    if (dateIsRest(state.date) && !dateFullyPast(state.date)) {
+      box.innerHTML = "<p class='muted'>Dam olish kuni — bron qilib bo'lmaydi</p>";
+      return;
+    }
     const nowMin = effectiveNowMin(state.date);
     const start = state.start;
     const end = state.end;
     const fullyPast = dateFullyPast(state.date);
-    for (const h of state.slots.hours) {
+    for (const h of (state.slots && state.slots.hours) || []) {
       const past = fullyPast || isHourPast(h, nowMin);
       const color = past ? "past" : h.color;
       const paint = HOUR_PAINT[color] || HOUR_PAINT.green;
@@ -475,8 +508,6 @@
       btn.addEventListener("click", () => onHourClick(h, past));
       box.appendChild(btn);
     }
-    const d = parseYmd(state.date);
-    $("dayTitle").textContent = `${DAYS_FULL[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
   }
 
   function firstFreeStart(hourStart, hourEnd) {
@@ -491,7 +522,19 @@
   }
 
   function onHourClick(h, past) {
-    if (past || h.color === "red" || h.color === "orange") return;
+    if (past) return;
+    if (dateIsRest(state.date)) {
+      toast("Bu kun dam olish — bron qilib bo'lmaydi");
+      return;
+    }
+    if (h.color === "red") {
+      toast("Bu soat band. Boshqa vaqt tanlang.");
+      return;
+    }
+    if (h.color === "orange") {
+      toast("Bu soat kutilmoqda. Boshqa vaqt tanlang yoki admin bilan bog'laning.");
+      return;
+    }
     const start = firstFreeStart(h.start_min, h.end_min);
     if (start == null) {
       toast("Bu soatda bron qilish uchun bo'sh 30 daqiqa yo'q");
@@ -593,6 +636,14 @@
       $("endSel").disabled = true;
       return;
     }
+    if (dateIsRest(state.date)) {
+      box.innerHTML = "Dam olish kuni — bron qilib bo'lmaydi";
+      btn.disabled = true;
+      btn.textContent = "Bron qilish";
+      $("startSel").disabled = true;
+      $("endSel").disabled = true;
+      return;
+    }
     $("startSel").disabled = false;
     $("endSel").disabled = false;
     if (state.start == null || state.end == null) {
@@ -623,15 +674,29 @@
             state.config.hourly_price_text = snap.hourly_price_text;
             state.config.open_min = snap.open_min;
             state.config.close_min = snap.close_min;
+            state.config.work_days = snap.work_days || state.config.work_days;
             state.config.days = snap.days || {};
           }
         } catch (err) {
           if (!state.snapshot) throw err;
         }
         state.slots = slotsFromSnapshot(state.date);
+        if (dateIsRest(state.date)) {
+          state.slots.hours = [];
+          state.slots.occupied = [];
+          state.slots.rest = true;
+        }
       } else {
         const payload = await api(`/api/slots?date=${state.date}`);
         paintSlots(payload);
+        if (payload.rest) {
+          $("hours").innerHTML = "<p class='muted'>Dam olish kuni — bron qilib bo'lmaydi</p>";
+          fillStartSelect();
+          fillEndSelect();
+          updateSummary();
+          renderDates();
+          return;
+        }
       }
       fillStartSelect();
       fillEndSelect();
@@ -665,7 +730,7 @@
     if (bot) {
       showOk(
         "Oxirgi qadam",
-        "Mini App yopilmaydi. «Botga o'tish» ni bosing — botda to'lov ko'rsatmasi ochiladi.",
+        "«Botga o'tish» ni bosing — to'lov ko'rsatmasi ochiladi. Bekor qilish kerak bo'lsa botdagi «Mening bronlarim» dan admin bilan bog'laning.",
         "Botga o'tish"
       );
     } else {
@@ -683,9 +748,17 @@
       toast("Faqat oldindagi kun va vaqtni bron qilish mumkin");
       return;
     }
+    if (dateIsRest(state.date)) {
+      toast("Bu kun dam olish — bron qilib bo'lmaydi");
+      return;
+    }
     const nowMin = effectiveNowMin(state.date);
     if (nowMin >= 0 && state.start < ceil30(nowMin)) {
       toast("Faqat oldindagi vaqtni bron qilish mumkin");
+      return;
+    }
+    if (overlaps(state.start, state.end, (state.slots && state.slots.occupied) || [])) {
+      toast("Bu vaqt band yoki kutilmoqda. Boshqa vaqt tanlang.");
       return;
     }
     const btn = $("bookBtn");
@@ -706,7 +779,7 @@
           `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
         showOk(
           "Bron yaratildi",
-          "Botga xabar ketdi: kartaga pul o'tkazib, skrinshot yuboring. Mini App ochiq qoladi.",
+          "Kartaga pul o'tkazib, skrinshot yuboring. Bekor qilish kerak bo'lsa botdagi «Mening bronlarim» dan admin bilan bog'laning.",
           "Davom etish"
         );
         applyLocalBooking();
@@ -715,8 +788,12 @@
       }
       bookViaTelegram();
     } catch (err) {
-      toast(err.message);
-      loadSlots();
+      const raw = String(err && err.message ? err.message : err);
+      const msg = raw.indexOf("band") >= 0 || raw.indexOf("kutil") >= 0 || raw.indexOf("bron bor") >= 0
+        ? raw
+        : (raw || "Bron qilinmadi. Boshqa vaqt tanlang.");
+      toast(msg);
+      try { loadSlots(); } catch (e) {}
     } finally {
       updateSummary();
     }

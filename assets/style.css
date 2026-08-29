@@ -136,7 +136,10 @@ h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
   background: #3f4441;
   color: #c5c9c6;
 }
-.cal-day.busy-red { box-shadow: inset 0 -4px 0 #ef4444; }
+.cal-day.rest {
+  background: #241c12;
+  color: #a78b6d;
+}
 .cal-day.busy-orange { box-shadow: inset 0 -4px 0 #f97316; }
 .cal-day.busy-blue { box-shadow: inset 0 -4px 0 #3b82f6; }
 
