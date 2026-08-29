@@ -5,6 +5,7 @@
     tg.expand();
     tg.setHeaderColor("#07140e");
     tg.setBackgroundColor("#07140e");
+    if (typeof tg.enableClosingConfirmation === "function") tg.enableClosingConfirmation();
   }
 
   const DAYS = ["Yak", "Du", "Se", "Cho", "Pay", "Ju", "Sha"];
@@ -26,6 +27,7 @@
     slots: null,
     start: null,
     end: null,
+    pendingStart: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -47,15 +49,34 @@
     return hour * 60 + minute;
   }
 
+  function queryParam(name) {
+    try {
+      return new URLSearchParams(location.search).get(name) || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
   function isGithubPages() {
     return location.hostname.endsWith("github.io");
   }
 
   function apiBase() {
-    const manual = String(CFG.apiBase || "").trim().replace(/\/$/, "");
+    const manual = (queryParam("api") || String(CFG.apiBase || "")).trim().replace(/\/$/, "");
     if (manual) return manual;
     if (isGithubPages()) return null;
     return "";
+  }
+
+  function botUsername() {
+    const fromSnap = state.snapshot && state.snapshot.bot_username;
+    return (
+      queryParam("bot") ||
+      String(CFG.botUsername || "") ||
+      String(fromSnap || "")
+    )
+      .trim()
+      .replace(/^@/, "");
   }
 
   function githubRepo() {
@@ -85,21 +106,36 @@
     return merged.reduce((sum, [a, b]) => sum + (b - a), 0);
   }
 
+  function normalizeOccupied(list) {
+    return (list || [])
+      .map((b) => ({
+        start_min: Number(b.start_min),
+        end_min: Number(b.end_min),
+        status: String(b.status || "confirmed"),
+      }))
+      .filter((b) => b.end_min > b.start_min);
+  }
+
   function hourColor(hour, bookings, closeMin) {
     const start = hour * 60;
     let end = hour * 60 + 60;
     if (closeMin != null) end = Math.min(end, closeMin);
     const available = Math.max(0, end - start);
     if (available <= 0) return "green";
-    const confirmed = bookings.filter((b) => b.status === "confirmed").map((b) => [b.start_min, b.end_min]);
-    const pending = bookings
-      .filter((b) => b.status === "pending_payment" || b.status === "pending_review")
-      .map((b) => [b.start_min, b.end_min]);
+    const list = normalizeOccupied(bookings);
+    const confirmed = [];
+    const pending = [];
+    for (const b of list) {
+      const s = b.status;
+      if (s === "cancelled" || s === "rejected") continue;
+      if (s === "pending_payment" || s === "pending_review") pending.push([b.start_min, b.end_min]);
+      else confirmed.push([b.start_min, b.end_min]);
+    }
     const bookedMins = occupiedMinutes(confirmed, start, end);
     const pendingMins = occupiedMinutes(pending, start, end);
     if (bookedMins >= available) return "red";
-    if (pendingMins > 0) return "orange";
-    if (bookedMins > 0) return "blue";
+    if (pendingMins >= available) return "orange";
+    if (bookedMins > 0 || pendingMins > 0) return "blue";
     return "green";
   }
 
@@ -187,25 +223,62 @@
     return data;
   }
 
+  async function fetchJson(url, extraHeaders) {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: extraHeaders || {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && typeof data.content === "string" && data.encoding === "base64") {
+      const bin = atob(data.content.replace(/\s/g, ""));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+    }
+    if (data && data.days && typeof data.days === "object") return data;
+    throw new Error("JSON emas");
+  }
+
   async function loadSnapshot() {
     const repo = githubRepo();
     const branch = CFG.githubBranch || "main";
+    const stamp = Date.now();
     const urls = [];
     if (repo) {
-      urls.push(`https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${Date.now()}`);
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${stamp}` });
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/data/public.json?t=${stamp}` });
+      urls.push({
+        url: `https://api.github.com/repos/${repo}/contents/webapp/data/public.json?ref=${branch}&t=${stamp}`,
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      urls.push({
+        url: `https://api.github.com/repos/${repo}/contents/data/public.json?ref=${branch}&t=${stamp}`,
+        headers: { Accept: "application/vnd.github+json" },
+      });
     }
-    urls.push(`./data/public.json?t=${Date.now()}`);
+    urls.push({ url: `./data/public.json?t=${stamp}` });
+    urls.push({ url: `./webapp/data/public.json?t=${stamp}` });
     let lastErr = "Bron ma'lumoti yuklanmadi";
-    for (const url of urls) {
+    const found = [];
+    for (const item of urls) {
       try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (res.ok) return await res.json();
-        lastErr = `HTTP ${res.status}`;
+        const data = await fetchJson(item.url, item.headers);
+        if (data && data.days && typeof data.days === "object") found.push(data);
       } catch (err) {
         lastErr = err.message || lastErr;
       }
     }
-    throw new Error(lastErr);
+    if (!found.length) throw new Error(lastErr);
+    found.sort((a, b) => {
+      const ta = Date.parse(a.updated_at || "") || 0;
+      const tb = Date.parse(b.updated_at || "") || 0;
+      if (tb !== ta) return tb - ta;
+      const occ = (s) =>
+        Object.values(s.days || {}).reduce((n, d) => n + ((d && d.occupied) || []).length, 0);
+      return occ(b) - occ(a);
+    });
+    return found[0];
   }
 
   function snapshotToConfig(snap) {
@@ -244,13 +317,44 @@
     const snap = state.snapshot || {};
     const openMin = Number(snap.open_min || 0);
     const closeMin = Number(snap.close_min || 1440);
-    const occupied = ((snap.days || {})[date] || {}).occupied || [];
+    const occupied = normalizeOccupied(((snap.days || {})[date] || {}).occupied || []);
     return {
       date,
       open_min: openMin,
       close_min: closeMin,
       now_min: effectiveNowMin(date),
       hourly_price: Number(snap.hourly_price || 0),
+      hours: buildHours(openMin, closeMin, occupied),
+      occupied,
+    };
+  }
+
+  function applyLocalBooking() {
+    if (state.start == null || state.end == null || !state.date) return;
+    const occ = {
+      start_min: Number(state.start),
+      end_min: Number(state.end),
+      status: "pending_payment",
+    };
+    if (!state.snapshot) state.snapshot = { days: {}, open_min: 360, close_min: 1440 };
+    if (!state.snapshot.days) state.snapshot.days = {};
+    if (!state.snapshot.days[state.date]) state.snapshot.days[state.date] = { occupied: [] };
+    state.snapshot.days[state.date].occupied = normalizeOccupied(
+      (state.snapshot.days[state.date].occupied || []).concat([occ])
+    );
+    state.slots = slotsFromSnapshot(state.date);
+  }
+
+  function paintSlots(payload) {
+    const openMin = Number(payload.open_min || 0);
+    const closeMin = Number(payload.close_min || 1440);
+    const occupied = normalizeOccupied(payload.occupied || []);
+    state.slots = {
+      date: payload.date || state.date,
+      open_min: openMin,
+      close_min: closeMin,
+      now_min: effectiveNowMin(state.date),
+      hourly_price: Number(payload.hourly_price || 0),
       hours: buildHours(openMin, closeMin, occupied),
       occupied,
     };
@@ -306,7 +410,13 @@
       const past = key < today;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "cal-day" + (key === state.date ? " active" : "") + (past ? " past" : "") + (key === today ? " today" : "");
+      const busy = past ? "" : dayOccupancyColor(key);
+      btn.className =
+        "cal-day" +
+        (key === state.date ? " active" : "") +
+        (past ? " past" : "") +
+        (key === today ? " today" : "") +
+        (busy ? ` ${busy}` : "");
       btn.textContent = String(day);
       btn.addEventListener("click", () => {
         state.date = key;
@@ -317,6 +427,25 @@
       });
       grid.appendChild(btn);
     }
+  }
+
+  const HOUR_PAINT = {
+    green: { bg: "rgba(34,197,94,0.34)", fg: "#dcfce7", bar: "#22c55e" },
+    blue: { bg: "rgba(37,99,235,0.5)", fg: "#dbeafe", bar: "#3b82f6" },
+    red: { bg: "rgba(220,38,38,0.52)", fg: "#fecaca", bar: "#ef4444" },
+    orange: { bg: "rgba(234,88,12,0.55)", fg: "#ffedd5", bar: "#f97316" },
+    past: { bg: "#2a2d2b", fg: "#9ca3af", bar: "#6b7280" },
+  };
+
+  function dayOccupancyColor(date) {
+    const occupied = normalizeOccupied((((state.snapshot || {}).days || {})[date] || {}).occupied || []);
+    if (!occupied.length) return "";
+    const closeMin = Number((state.snapshot && state.snapshot.close_min) || 1440);
+    const colors = new Set(occupied.map((b) => hourColor(Math.floor(b.start_min / 60), occupied, closeMin)));
+    if (colors.has("red")) return "busy-red";
+    if (colors.has("orange")) return "busy-orange";
+    if (colors.has("blue")) return "busy-blue";
+    return "busy-blue";
   }
 
   function colorLabel(color) {
@@ -332,10 +461,16 @@
     const fullyPast = dateFullyPast(state.date);
     for (const h of state.slots.hours) {
       const past = fullyPast || isHourPast(h, nowMin);
+      const color = past ? "past" : h.color;
+      const paint = HOUR_PAINT[color] || HOUR_PAINT.green;
       const inRange = !past && start != null && end != null && h.start_min < end && start < h.end_min;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `hour ${past ? "past" : h.color}${inRange ? " in-range" : ""}`;
+      btn.className = `hour ${color}${inRange ? " in-range" : ""}`;
+      btn.setAttribute("data-color", color);
+      btn.style.background = paint.bg;
+      btn.style.color = paint.fg;
+      btn.style.boxShadow = `inset 5px 0 0 ${paint.bar}`;
       btn.innerHTML = `<div class="t">${h.label}</div><div class="s">${past ? "O'tib ketgan" : colorLabel(h.color)}</div>`;
       btn.addEventListener("click", () => onHourClick(h, past));
       box.appendChild(btn);
@@ -476,37 +611,70 @@
   }
 
   async function loadSlots() {
-    $("hours").innerHTML = "<p class='muted'>Yuklanmoqda…</p>";
+    const first = !$("hours").querySelector(".hour");
+    if (first) $("hours").innerHTML = "<p class='muted'>Yuklanmoqda…</p>";
     try {
       if (apiBase() === null) {
+        try {
+          const snap = await loadSnapshot();
+          state.snapshot = snap;
+          if (state.config) {
+            state.config.hourly_price = snap.hourly_price;
+            state.config.hourly_price_text = snap.hourly_price_text;
+            state.config.open_min = snap.open_min;
+            state.config.close_min = snap.close_min;
+            state.config.days = snap.days || {};
+          }
+        } catch (err) {
+          if (!state.snapshot) throw err;
+        }
         state.slots = slotsFromSnapshot(state.date);
       } else {
-        state.slots = await api(`/api/slots?date=${state.date}`);
-        state.slots.now_min = effectiveNowMin(state.date);
+        const payload = await api(`/api/slots?date=${state.date}`);
+        paintSlots(payload);
       }
       fillStartSelect();
       fillEndSelect();
       updateSummary();
       renderHours();
+      renderDates();
     } catch (err) {
       $("hours").innerHTML = `<p class="muted">${err.message}</p>`;
     }
   }
 
+  function showOk(title, hint, btnText) {
+    const titleEl = $("okTitle");
+    const hintEl = $("okHint");
+    if (titleEl) titleEl.textContent = title;
+    if (hintEl) hintEl.textContent = hint;
+    $("closeBtn").textContent = btnText;
+    $("okModal").hidden = false;
+  }
+
   function bookViaTelegram() {
-    if (!tg || typeof tg.sendData !== "function") {
-      throw new Error("Pastdagi «🏟️ Bron qilish» tugmasidan oching — shunda bron botga ketadi.");
-    }
-    tg.sendData(JSON.stringify({
-      date: state.date,
-      start_min: state.start,
-      end_min: state.end,
-    }));
-    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    applyLocalBooking();
+    renderHours();
+    updateSummary();
+    const payload = `b${String(state.date).replace(/-/g, "")}-${state.start}-${state.end}`;
+    state.pendingStart = payload;
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
     $("okText").textContent =
       `${displayRange(state.start, state.end)}  ·  ${durationText(state.start, state.end)}  ·  ${formatSum(Math.round((state.slots.hourly_price || 0) * (state.end - state.start) / 60))} so'm`;
-    $("okModal").hidden = false;
-    setTimeout(() => { try { tg.close(); } catch (e) {} }, 1200);
+    const bot = botUsername();
+    if (bot) {
+      showOk(
+        "Oxirgi qadam",
+        "Mini App yopilmaydi. «Botga o'tish» ni bosing — botda to'lov ko'rsatmasi ochiladi.",
+        "Botga o'tish"
+      );
+    } else {
+      showOk(
+        "Oxirgi qadam",
+        `Botda shu buyruqni yuboring: /start ${payload}`,
+        "Yopish"
+      );
+    }
   }
 
   async function book() {
@@ -522,27 +690,35 @@
     }
     const btn = $("bookBtn");
     btn.disabled = true;
+    state.pendingStart = null;
     try {
-      if (apiBase() === null) {
-        bookViaTelegram();
+      if (apiBase() !== null) {
+        const res = await api("/api/book", {
+          method: "POST",
+          body: JSON.stringify({
+            date: state.date,
+            start_min: state.start,
+            end_min: state.end,
+          }),
+        });
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        $("okText").textContent =
+          `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
+        showOk(
+          "Bron yaratildi",
+          "Botga xabar ketdi: kartaga pul o'tkazib, skrinshot yuboring. Mini App ochiq qoladi.",
+          "Davom etish"
+        );
+        applyLocalBooking();
+        await loadSlots();
         return;
       }
-      const res = await api("/api/book", {
-        method: "POST",
-        body: JSON.stringify({
-          date: state.date,
-          start_min: state.start,
-          end_min: state.end,
-        }),
-      });
-      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-      $("okText").textContent =
-        `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
-      $("okModal").hidden = false;
+      bookViaTelegram();
     } catch (err) {
       toast(err.message);
-      btn.disabled = false;
       loadSlots();
+    } finally {
+      updateSummary();
     }
   }
 
@@ -559,8 +735,20 @@
   });
   $("bookBtn").addEventListener("click", book);
   $("closeBtn").addEventListener("click", () => {
-    if (tg) tg.close();
-    else $("okModal").hidden = true;
+    $("okModal").hidden = true;
+    const payload = state.pendingStart;
+    const bot = botUsername();
+    if (payload && bot) {
+      const link = `https://t.me/${bot}?start=${payload}`;
+      state.pendingStart = null;
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(link);
+      else window.open(link, "_blank");
+      return;
+    }
+    if (payload && !bot) {
+      toast(`/start ${payload}`);
+    }
+    state.pendingStart = null;
   });
   $("calPrev").addEventListener("click", () => {
     const todayDt = parseYmd(state.config.today);
@@ -598,6 +786,9 @@
       state.date = state.config.today;
       renderDates();
       await loadSlots();
+      setInterval(() => {
+        if (document.visibilityState === "visible") loadSlots();
+      }, 8000);
     } catch (err) {
       $("stadiumAddr").textContent = err.message;
     }
