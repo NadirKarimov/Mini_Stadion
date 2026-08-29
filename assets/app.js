@@ -73,7 +73,8 @@
     return (
       queryParam("bot") ||
       String(CFG.botUsername || "") ||
-      String(fromSnap || "")
+      String(fromSnap || "") ||
+      "Mini_Stadion_bronbot"
     )
       .trim()
       .replace(/^@/, "");
@@ -724,29 +725,31 @@
     $("okModal").hidden = false;
   }
 
-  function bookViaTelegram() {
+  function sendBookingToBot() {
     applyLocalBooking();
     renderHours();
     updateSummary();
-    const payload = `b${String(state.date).replace(/-/g, "")}-${state.start}-${state.end}`;
-    state.pendingStart = payload;
+    const ymd = String(state.date).replace(/-/g, "");
+    const payload = `b${ymd}-${state.start}-${state.end}-t${Date.now() % 1000000}`;
+    const data = JSON.stringify({
+      date: state.date,
+      start_min: state.start,
+      end_min: state.end,
+    });
+    const bot = botUsername();
+    const link = bot ? `https://t.me/${bot}?start=${payload}` : "";
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
     $("okText").textContent =
       `${displayRange(state.start, state.end)}  ·  ${durationText(state.start, state.end)}  ·  ${formatSum(Math.round((state.slots.hourly_price || 0) * (state.end - state.start) / 60))} so'm`;
-    const bot = botUsername();
-    if (bot) {
-      showOk(
-        "Oxirgi qadam",
-        "«Botga o'tish» ni bosing — to'lov ko'rsatmasi ochiladi. Bekor qilish kerak bo'lsa botdagi «Mening bronlarim» dan admin bilan bog'laning.",
-        "Botga o'tish"
-      );
-    } else {
-      showOk(
-        "Oxirgi qadam",
-        `Botda shu buyruqni yuboring: /start ${payload}`,
-        "Yopish"
-      );
+    showOk("Bron yuborildi", "Botga o'ting — to'lov ko'rsatmasi keladi. Admin ham xabar oladi.", "Botga o'tish");
+    state.pendingStart = payload;
+    if (link) {
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(link);
+      else window.location.href = link;
     }
+    try {
+      if (tg && typeof tg.sendData === "function") tg.sendData(data);
+    } catch (err) {}
   }
 
   async function book() {
@@ -786,20 +789,17 @@
           `${res.range}  ·  ${res.duration}  ·  ${res.price_text} so'm`;
         showOk(
           "Bron yaratildi",
-          "Kartaga pul o'tkazib, skrinshot yuboring. Bekor qilish kerak bo'lsa botdagi «Mening bronlarim» dan admin bilan bog'laning.",
+          "Kartaga pul o'tkazib, skrinshot yuboring.",
           "Davom etish"
         );
         applyLocalBooking();
         await loadSlots();
         return;
       }
-      bookViaTelegram();
+      sendBookingToBot();
     } catch (err) {
       const raw = String(err && err.message ? err.message : err);
-      const msg = raw.indexOf("band") >= 0 || raw.indexOf("kutil") >= 0 || raw.indexOf("bron bor") >= 0
-        ? raw
-        : (raw || "Bron qilinmadi. Boshqa vaqt tanlang.");
-      toast(msg);
+      toast(raw || "Bron qilinmadi. Qayta urinib ko'ring.");
       try { loadSlots(); } catch (e) {}
     } finally {
       updateSummary();
