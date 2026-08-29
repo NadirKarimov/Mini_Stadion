@@ -15,16 +15,10 @@
     5,
     6
   ],
-  "updated_at": "2026-08-29T05:41:15.085926+05:00",
+  "updated_at": "2026-08-29T06:04:45.123348+05:00",
   "days": {
     "2026-08-29": {
-      "occupied": [
-        {
-          "start_min": 540,
-          "end_min": 630,
-          "status": "confirmed"
-        }
-      ],
+      "occupied": [],
       "hours": [
         {
           "hour": 6,
@@ -52,14 +46,14 @@
           "start_min": 540,
           "end_min": 600,
           "label": "09:00/09:59",
-          "color": "red"
+          "color": "green"
         },
         {
           "hour": 10,
           "start_min": 600,
           "end_min": 660,
           "label": "10:00/10:59",
-          "color": "blue"
+          "color": "green"
         },
         {
           "hour": 11,

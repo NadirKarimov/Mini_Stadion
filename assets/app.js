@@ -113,7 +113,8 @@
         end_min: Number(b.end_min),
         status: String(b.status || "confirmed"),
       }))
-      .filter((b) => b.end_min > b.start_min);
+      .filter((b) => b.end_min > b.start_min)
+      .filter((b) => b.status !== "cancelled" && b.status !== "rejected");
   }
 
   function hourColor(hour, bookings, closeMin) {
@@ -226,7 +227,7 @@
   async function fetchJson(url, extraHeaders) {
     const res = await fetch(url, {
       cache: "no-store",
-      headers: extraHeaders || {},
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache", ...(extraHeaders || {}) },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -246,39 +247,45 @@
     const stamp = Date.now();
     const urls = [];
     if (repo) {
-      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${stamp}` });
-      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/data/public.json?t=${stamp}` });
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/webapp/data/public.json?t=${stamp}`, remote: true });
+      urls.push({ url: `https://raw.githubusercontent.com/${repo}/${branch}/data/public.json?t=${stamp}`, remote: true });
       urls.push({
         url: `https://api.github.com/repos/${repo}/contents/webapp/data/public.json?ref=${branch}&t=${stamp}`,
         headers: { Accept: "application/vnd.github+json" },
+        remote: true,
       });
       urls.push({
         url: `https://api.github.com/repos/${repo}/contents/data/public.json?ref=${branch}&t=${stamp}`,
         headers: { Accept: "application/vnd.github+json" },
+        remote: true,
       });
     }
-    urls.push({ url: `./data/public.json?t=${stamp}` });
-    urls.push({ url: `./webapp/data/public.json?t=${stamp}` });
+    urls.push({ url: `./data/public.json?t=${stamp}`, remote: false });
+    urls.push({ url: `./webapp/data/public.json?t=${stamp}`, remote: false });
     let lastErr = "Bron ma'lumoti yuklanmadi";
-    const found = [];
+    const remote = [];
+    const local = [];
     for (const item of urls) {
       try {
         const data = await fetchJson(item.url, item.headers);
-        if (data && data.days && typeof data.days === "object") found.push(data);
+        if (data && data.days && typeof data.days === "object") {
+          (item.remote ? remote : local).push(data);
+        }
       } catch (err) {
         lastErr = err.message || lastErr;
       }
     }
-    if (!found.length) throw new Error(lastErr);
-    found.sort((a, b) => {
+    const pool = remote.length ? remote : local;
+    if (!pool.length) throw new Error(lastErr);
+    pool.sort((a, b) => {
       const ta = Date.parse(a.updated_at || "") || 0;
       const tb = Date.parse(b.updated_at || "") || 0;
       if (tb !== ta) return tb - ta;
       const occ = (s) =>
         Object.values(s.days || {}).reduce((n, d) => n + ((d && d.occupied) || []).length, 0);
-      return occ(b) - occ(a);
+      return occ(a) - occ(b);
     });
-    return found[0];
+    return pool[0];
   }
 
   function snapshotToConfig(snap) {
