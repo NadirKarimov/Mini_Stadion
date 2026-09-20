@@ -15,19 +15,276 @@
     5,
     6
   ],
-  "updated_at": "2026-08-29T06:16:39.157849+05:00",
+  "updated_at": "2026-09-21T01:49:45.189082+05:00",
   "days": {
-    "2026-08-29": {
-      "occupied": [
+    "2026-09-21": {
+      "occupied": [],
+      "hours": [
         {
-          "start_min": 540,
-          "end_min": 630,
-          "status": "confirmed"
+          "hour": 6,
+          "start_min": 360,
+          "end_min": 420,
+          "label": "06:00/06:59",
+          "color": "green"
         },
         {
+          "hour": 7,
+          "start_min": 420,
+          "end_min": 480,
+          "label": "07:00/07:59",
+          "color": "green"
+        },
+        {
+          "hour": 8,
+          "start_min": 480,
+          "end_min": 540,
+          "label": "08:00/08:59",
+          "color": "green"
+        },
+        {
+          "hour": 9,
+          "start_min": 540,
+          "end_min": 600,
+          "label": "09:00/09:59",
+          "color": "green"
+        },
+        {
+          "hour": 10,
+          "start_min": 600,
+          "end_min": 660,
+          "label": "10:00/10:59",
+          "color": "green"
+        },
+        {
+          "hour": 11,
+          "start_min": 660,
+          "end_min": 720,
+          "label": "11:00/11:59",
+          "color": "green"
+        },
+        {
+          "hour": 12,
+          "start_min": 720,
+          "end_min": 780,
+          "label": "12:00/12:59",
+          "color": "green"
+        },
+        {
+          "hour": 13,
+          "start_min": 780,
+          "end_min": 840,
+          "label": "13:00/13:59",
+          "color": "green"
+        },
+        {
+          "hour": 14,
           "start_min": 840,
           "end_min": 900,
-          "status": "pending_review"
+          "label": "14:00/14:59",
+          "color": "green"
+        },
+        {
+          "hour": 15,
+          "start_min": 900,
+          "end_min": 960,
+          "label": "15:00/15:59",
+          "color": "green"
+        },
+        {
+          "hour": 16,
+          "start_min": 960,
+          "end_min": 1020,
+          "label": "16:00/16:59",
+          "color": "green"
+        },
+        {
+          "hour": 17,
+          "start_min": 1020,
+          "end_min": 1080,
+          "label": "17:00/17:59",
+          "color": "green"
+        },
+        {
+          "hour": 18,
+          "start_min": 1080,
+          "end_min": 1140,
+          "label": "18:00/18:59",
+          "color": "green"
+        },
+        {
+          "hour": 19,
+          "start_min": 1140,
+          "end_min": 1200,
+          "label": "19:00/19:59",
+          "color": "green"
+        },
+        {
+          "hour": 20,
+          "start_min": 1200,
+          "end_min": 1260,
+          "label": "20:00/20:59",
+          "color": "green"
+        },
+        {
+          "hour": 21,
+          "start_min": 1260,
+          "end_min": 1320,
+          "label": "21:00/21:59",
+          "color": "green"
+        },
+        {
+          "hour": 22,
+          "start_min": 1320,
+          "end_min": 1380,
+          "label": "22:00/22:59",
+          "color": "green"
+        },
+        {
+          "hour": 23,
+          "start_min": 1380,
+          "end_min": 1440,
+          "label": "23:00/23:59",
+          "color": "green"
+        }
+      ]
+    },
+    "2026-09-22": {
+      "occupied": [],
+      "hours": [
+        {
+          "hour": 6,
+          "start_min": 360,
+          "end_min": 420,
+          "label": "06:00/06:59",
+          "color": "green"
+        },
+        {
+          "hour": 7,
+          "start_min": 420,
+          "end_min": 480,
+          "label": "07:00/07:59",
+          "color": "green"
+        },
+        {
+          "hour": 8,
+          "start_min": 480,
+          "end_min": 540,
+          "label": "08:00/08:59",
+          "color": "green"
+        },
+        {
+          "hour": 9,
+          "start_min": 540,
+          "end_min": 600,
+          "label": "09:00/09:59",
+          "color": "green"
+        },
+        {
+          "hour": 10,
+          "start_min": 600,
+          "end_min": 660,
+          "label": "10:00/10:59",
+          "color": "green"
+        },
+        {
+          "hour": 11,
+          "start_min": 660,
+          "end_min": 720,
+          "label": "11:00/11:59",
+          "color": "green"
+        },
+        {
+          "hour": 12,
+          "start_min": 720,
+          "end_min": 780,
+          "label": "12:00/12:59",
+          "color": "green"
+        },
+        {
+          "hour": 13,
+          "start_min": 780,
+          "end_min": 840,
+          "label": "13:00/13:59",
+          "color": "green"
+        },
+        {
+          "hour": 14,
+          "start_min": 840,
+          "end_min": 900,
+          "label": "14:00/14:59",
+          "color": "green"
+        },
+        {
+          "hour": 15,
+          "start_min": 900,
+          "end_min": 960,
+          "label": "15:00/15:59",
+          "color": "green"
+        },
+        {
+          "hour": 16,
+          "start_min": 960,
+          "end_min": 1020,
+          "label": "16:00/16:59",
+          "color": "green"
+        },
+        {
+          "hour": 17,
+          "start_min": 1020,
+          "end_min": 1080,
+          "label": "17:00/17:59",
+          "color": "green"
+        },
+        {
+          "hour": 18,
+          "start_min": 1080,
+          "end_min": 1140,
+          "label": "18:00/18:59",
+          "color": "green"
+        },
+        {
+          "hour": 19,
+          "start_min": 1140,
+          "end_min": 1200,
+          "label": "19:00/19:59",
+          "color": "green"
+        },
+        {
+          "hour": 20,
+          "start_min": 1200,
+          "end_min": 1260,
+          "label": "20:00/20:59",
+          "color": "green"
+        },
+        {
+          "hour": 21,
+          "start_min": 1260,
+          "end_min": 1320,
+          "label": "21:00/21:59",
+          "color": "green"
+        },
+        {
+          "hour": 22,
+          "start_min": 1320,
+          "end_min": 1380,
+          "label": "22:00/22:59",
+          "color": "green"
+        },
+        {
+          "hour": 23,
+          "start_min": 1380,
+          "end_min": 1440,
+          "label": "23:00/23:59",
+          "color": "green"
+        }
+      ]
+    },
+    "2026-09-23": {
+      "occupied": [
+        {
+          "start_min": 480,
+          "end_min": 540,
+          "status": "confirmed"
         }
       ],
       "hours": [
@@ -50,21 +307,21 @@
           "start_min": 480,
           "end_min": 540,
           "label": "08:00/08:59",
-          "color": "green"
-        },
-        {
-          "hour": 9,
-          "start_min": 540,
-          "end_min": 600,
-          "label": "09:00/09:59",
           "color": "red"
         },
         {
+          "hour": 9,
+          "start_min": 540,
+          "end_min": 600,
+          "label": "09:00/09:59",
+          "color": "green"
+        },
+        {
           "hour": 10,
           "start_min": 600,
           "end_min": 660,
           "label": "10:00/10:59",
-          "color": "blue"
+          "color": "green"
         },
         {
           "hour": 11,
@@ -92,7 +349,7 @@
           "start_min": 840,
           "end_min": 900,
           "label": "14:00/14:59",
-          "color": "orange"
+          "color": "green"
         },
         {
           "hour": 15,
@@ -159,7 +416,7 @@
         }
       ]
     },
-    "2026-08-30": {
+    "2026-09-24": {
       "occupied": [],
       "hours": [
         {
@@ -290,7 +547,7 @@
         }
       ]
     },
-    "2026-08-31": {
+    "2026-09-25": {
       "occupied": [],
       "hours": [
         {
@@ -421,7 +678,7 @@
         }
       ]
     },
-    "2026-09-01": {
+    "2026-09-26": {
       "occupied": [],
       "hours": [
         {
@@ -552,7 +809,7 @@
         }
       ]
     },
-    "2026-09-02": {
+    "2026-09-27": {
       "occupied": [],
       "hours": [
         {
@@ -683,7 +940,7 @@
         }
       ]
     },
-    "2026-09-03": {
+    "2026-09-28": {
       "occupied": [],
       "hours": [
         {
@@ -814,7 +1071,7 @@
         }
       ]
     },
-    "2026-09-04": {
+    "2026-09-29": {
       "occupied": [],
       "hours": [
         {
@@ -945,7 +1202,7 @@
         }
       ]
     },
-    "2026-09-05": {
+    "2026-09-30": {
       "occupied": [],
       "hours": [
         {
@@ -1076,7 +1333,7 @@
         }
       ]
     },
-    "2026-09-06": {
+    "2026-10-01": {
       "occupied": [],
       "hours": [
         {
@@ -1207,7 +1464,7 @@
         }
       ]
     },
-    "2026-09-07": {
+    "2026-10-02": {
       "occupied": [],
       "hours": [
         {
@@ -1338,7 +1595,7 @@
         }
       ]
     },
-    "2026-09-08": {
+    "2026-10-03": {
       "occupied": [],
       "hours": [
         {
@@ -1469,7 +1726,7 @@
         }
       ]
     },
-    "2026-09-09": {
+    "2026-10-04": {
       "occupied": [],
       "hours": [
         {
@@ -1600,7 +1857,7 @@
         }
       ]
     },
-    "2026-09-10": {
+    "2026-10-05": {
       "occupied": [],
       "hours": [
         {
@@ -1731,7 +1988,7 @@
         }
       ]
     },
-    "2026-09-11": {
+    "2026-10-06": {
       "occupied": [],
       "hours": [
         {
@@ -1862,7 +2119,7 @@
         }
       ]
     },
-    "2026-09-12": {
+    "2026-10-07": {
       "occupied": [],
       "hours": [
         {
@@ -1993,7 +2250,7 @@
         }
       ]
     },
-    "2026-09-13": {
+    "2026-10-08": {
       "occupied": [],
       "hours": [
         {
@@ -2124,7 +2381,7 @@
         }
       ]
     },
-    "2026-09-14": {
+    "2026-10-09": {
       "occupied": [],
       "hours": [
         {
@@ -2255,7 +2512,7 @@
         }
       ]
     },
-    "2026-09-15": {
+    "2026-10-10": {
       "occupied": [],
       "hours": [
         {
@@ -2386,269 +2643,7 @@
         }
       ]
     },
-    "2026-09-16": {
-      "occupied": [],
-      "hours": [
-        {
-          "hour": 6,
-          "start_min": 360,
-          "end_min": 420,
-          "label": "06:00/06:59",
-          "color": "green"
-        },
-        {
-          "hour": 7,
-          "start_min": 420,
-          "end_min": 480,
-          "label": "07:00/07:59",
-          "color": "green"
-        },
-        {
-          "hour": 8,
-          "start_min": 480,
-          "end_min": 540,
-          "label": "08:00/08:59",
-          "color": "green"
-        },
-        {
-          "hour": 9,
-          "start_min": 540,
-          "end_min": 600,
-          "label": "09:00/09:59",
-          "color": "green"
-        },
-        {
-          "hour": 10,
-          "start_min": 600,
-          "end_min": 660,
-          "label": "10:00/10:59",
-          "color": "green"
-        },
-        {
-          "hour": 11,
-          "start_min": 660,
-          "end_min": 720,
-          "label": "11:00/11:59",
-          "color": "green"
-        },
-        {
-          "hour": 12,
-          "start_min": 720,
-          "end_min": 780,
-          "label": "12:00/12:59",
-          "color": "green"
-        },
-        {
-          "hour": 13,
-          "start_min": 780,
-          "end_min": 840,
-          "label": "13:00/13:59",
-          "color": "green"
-        },
-        {
-          "hour": 14,
-          "start_min": 840,
-          "end_min": 900,
-          "label": "14:00/14:59",
-          "color": "green"
-        },
-        {
-          "hour": 15,
-          "start_min": 900,
-          "end_min": 960,
-          "label": "15:00/15:59",
-          "color": "green"
-        },
-        {
-          "hour": 16,
-          "start_min": 960,
-          "end_min": 1020,
-          "label": "16:00/16:59",
-          "color": "green"
-        },
-        {
-          "hour": 17,
-          "start_min": 1020,
-          "end_min": 1080,
-          "label": "17:00/17:59",
-          "color": "green"
-        },
-        {
-          "hour": 18,
-          "start_min": 1080,
-          "end_min": 1140,
-          "label": "18:00/18:59",
-          "color": "green"
-        },
-        {
-          "hour": 19,
-          "start_min": 1140,
-          "end_min": 1200,
-          "label": "19:00/19:59",
-          "color": "green"
-        },
-        {
-          "hour": 20,
-          "start_min": 1200,
-          "end_min": 1260,
-          "label": "20:00/20:59",
-          "color": "green"
-        },
-        {
-          "hour": 21,
-          "start_min": 1260,
-          "end_min": 1320,
-          "label": "21:00/21:59",
-          "color": "green"
-        },
-        {
-          "hour": 22,
-          "start_min": 1320,
-          "end_min": 1380,
-          "label": "22:00/22:59",
-          "color": "green"
-        },
-        {
-          "hour": 23,
-          "start_min": 1380,
-          "end_min": 1440,
-          "label": "23:00/23:59",
-          "color": "green"
-        }
-      ]
-    },
-    "2026-09-17": {
-      "occupied": [],
-      "hours": [
-        {
-          "hour": 6,
-          "start_min": 360,
-          "end_min": 420,
-          "label": "06:00/06:59",
-          "color": "green"
-        },
-        {
-          "hour": 7,
-          "start_min": 420,
-          "end_min": 480,
-          "label": "07:00/07:59",
-          "color": "green"
-        },
-        {
-          "hour": 8,
-          "start_min": 480,
-          "end_min": 540,
-          "label": "08:00/08:59",
-          "color": "green"
-        },
-        {
-          "hour": 9,
-          "start_min": 540,
-          "end_min": 600,
-          "label": "09:00/09:59",
-          "color": "green"
-        },
-        {
-          "hour": 10,
-          "start_min": 600,
-          "end_min": 660,
-          "label": "10:00/10:59",
-          "color": "green"
-        },
-        {
-          "hour": 11,
-          "start_min": 660,
-          "end_min": 720,
-          "label": "11:00/11:59",
-          "color": "green"
-        },
-        {
-          "hour": 12,
-          "start_min": 720,
-          "end_min": 780,
-          "label": "12:00/12:59",
-          "color": "green"
-        },
-        {
-          "hour": 13,
-          "start_min": 780,
-          "end_min": 840,
-          "label": "13:00/13:59",
-          "color": "green"
-        },
-        {
-          "hour": 14,
-          "start_min": 840,
-          "end_min": 900,
-          "label": "14:00/14:59",
-          "color": "green"
-        },
-        {
-          "hour": 15,
-          "start_min": 900,
-          "end_min": 960,
-          "label": "15:00/15:59",
-          "color": "green"
-        },
-        {
-          "hour": 16,
-          "start_min": 960,
-          "end_min": 1020,
-          "label": "16:00/16:59",
-          "color": "green"
-        },
-        {
-          "hour": 17,
-          "start_min": 1020,
-          "end_min": 1080,
-          "label": "17:00/17:59",
-          "color": "green"
-        },
-        {
-          "hour": 18,
-          "start_min": 1080,
-          "end_min": 1140,
-          "label": "18:00/18:59",
-          "color": "green"
-        },
-        {
-          "hour": 19,
-          "start_min": 1140,
-          "end_min": 1200,
-          "label": "19:00/19:59",
-          "color": "green"
-        },
-        {
-          "hour": 20,
-          "start_min": 1200,
-          "end_min": 1260,
-          "label": "20:00/20:59",
-          "color": "green"
-        },
-        {
-          "hour": 21,
-          "start_min": 1260,
-          "end_min": 1320,
-          "label": "21:00/21:59",
-          "color": "green"
-        },
-        {
-          "hour": 22,
-          "start_min": 1320,
-          "end_min": 1380,
-          "label": "22:00/22:59",
-          "color": "green"
-        },
-        {
-          "hour": 23,
-          "start_min": 1380,
-          "end_min": 1440,
-          "label": "23:00/23:59",
-          "color": "green"
-        }
-      ]
-    },
-    "2026-09-18": {
+    "2026-10-11": {
       "occupied": [],
       "hours": [
         {
