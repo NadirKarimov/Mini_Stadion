@@ -15,7 +15,7 @@
     5,
     6
   ],
-  "updated_at": "2026-09-21T01:57:08.747034+05:00",
+  "updated_at": "2026-09-21T01:57:32.341970+05:00",
   "days": {
     "2026-09-21": {
       "occupied": [],
@@ -421,7 +421,7 @@
         {
           "start_min": 420,
           "end_min": 480,
-          "status": "pending_payment"
+          "status": "pending_review"
         }
       ],
       "hours": [
