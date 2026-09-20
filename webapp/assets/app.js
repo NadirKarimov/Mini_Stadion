@@ -15,8 +15,12 @@
     green: "Bo'sh",
     blue: "Qisman bo'sh",
     red: "Band",
-    orange: "Tasdiq kutilmoqda",
+    amber: "To'lov kutilmoqda",
+    orange: "To'lov kutilmoqda",
   };
+
+  // Minimal bron davomiyligi (backenddagi BOOKING_STEP_MINUTES bilan bir xil)
+  const MIN_BOOKING_MINUTES = 30;
 
   const state = {
     config: null,
@@ -28,6 +32,9 @@
     start: null,
     end: null,
     pendingStart: null,
+    // Foydalanuvchi shu brauzerda qilgan, hali snapshotga tushmagan bronlar:
+    // refresh paytida sariq holat g'oyib bo'lmasligi uchun
+    localPending: {},
   };
 
   const $ = (id) => document.getElementById(id);
@@ -118,7 +125,33 @@
       .filter((b) => b.status !== "cancelled" && b.status !== "rejected");
   }
 
+  function largestFreeGap(intervals, start, end) {
+    const available = end - start;
+    if (available <= 0) return 0;
+    const clipped = [];
+    for (const [s, e] of intervals) {
+      const a = Math.max(s, start);
+      const b = Math.min(e, end);
+      if (a < b) clipped.push([a, b]);
+    }
+    if (!clipped.length) return available;
+    clipped.sort((x, y) => x[0] - y[0]);
+    let gap = 0;
+    let cursor = start;
+    for (const [s, e] of clipped) {
+      if (s > cursor) gap = Math.max(gap, s - cursor);
+      cursor = Math.max(cursor, e);
+    }
+    gap = Math.max(gap, end - cursor);
+    return gap;
+  }
+
   function hourColor(hour, bookings, closeMin) {
+    // Backend hour_color bilan bir xil mantiq:
+    // green  — to'liq bo'sh
+    // blue   — qisman band, bron qilib bo'ladigan >=30 daqiqa bo'sh joy bor
+    // amber  — to'lov kutilmoqda (pending)
+    // red    — to'liq band YOKI qolgan bo'sh qismi <30 daqiqa (bron qilib bo'lmaydi)
     const start = hour * 60;
     let end = hour * 60 + 60;
     if (closeMin != null) end = Math.min(end, closeMin);
@@ -134,11 +167,64 @@
       else confirmed.push([b.start_min, b.end_min]);
     }
     const bookedMins = occupiedMinutes(confirmed, start, end);
-    const pendingMins = occupiedMinutes(pending, start, end);
     if (bookedMins >= available) return "red";
-    if (pendingMins >= available) return "orange";
-    if (bookedMins > 0 || pendingMins > 0) return "blue";
+    const pendingMins = occupiedMinutes(pending, start, end);
+    const pendingOverlap = pendingMins > 0;
+    if (bookedMins + pendingMins >= available) return pendingOverlap ? "amber" : "red";
+    const bookable = largestFreeGap(confirmed.concat(pending), start, end);
+    if (bookable < MIN_BOOKING_MINUTES) return pendingOverlap ? "amber" : "red";
+    if (bookedMins > 0 || pendingOverlap) return "blue";
     return "green";
+  }
+
+  // ── Lokal pending (brauzer ichida) ─────────────────────────────────────
+  // Deep-link rejimida bron botga yetib borishi bir necha soniya, GitHub
+  // snapshot esa bir necha daqiqa olishi mumkin. Shu orada soat sariq qoladi.
+
+  // Lokal pending 60 daqiqa saqlanadi: snapshot GitHub orqali ketishi bir necha
+  // daqiqa olishi mumkin, bekor qilingan bron esa serverdan olib tashlangach
+  // (rad/cancel/expire) bu yozuv o'zi o'chadi.
+  function localPendingFor(date) {
+    return (state.localPending[date] || []).filter((p) => Date.now() - p.added_at < 60 * 60 * 1000);
+  }
+
+  function addLocalPending(date, start, end) {
+    const list = (state.localPending[date] || []).filter((p) => Date.now() - p.added_at < 60 * 60 * 1000);
+    list.push({ start_min: Number(start), end_min: Number(end), added_at: Date.now() });
+    state.localPending[date] = list;
+  }
+
+  function coveredByServer(base, start, end) {
+    return base.some((o) => o.start_min <= start && o.end_min >= end);
+  }
+
+  function pendingExtras(date, base) {
+    const extras = [];
+    for (const p of localPendingFor(date)) {
+      if (!coveredByServer(base, p.start_min, p.end_min)) {
+        extras.push({ start_min: p.start_min, end_min: p.end_min, status: "pending_payment" });
+      }
+    }
+    return extras;
+  }
+
+  // pendingExtras and effectiveOccupied are kept intentionally separate:
+  // slots path uses base-only comparison, day colors use hasAny comparison.
+
+  function effectiveOccupied(date) {
+    const raw = (((state.snapshot || {}).days || {})[date] || {}).occupied || [];
+    const base = normalizeOccupied(raw);
+    const extras = [];
+    for (const p of localPendingFor(date)) {
+      // Serverda bu oraliq bo'yicha istalgan yozuv bo'lsa (rad etilgani ham) — lokal sariqlikni olib tashlaymiz
+      const hasAny = raw.some(
+        (o) => Number(o.start_min) === p.start_min && Number(o.end_min) === p.end_min
+      );
+      if (!hasAny && !coveredByServer(base, p.start_min, p.end_min)) {
+        extras.push({ start_min: p.start_min, end_min: p.end_min, status: "pending_payment" });
+      }
+    }
+    return base.concat(extras);
   }
 
   function buildHours(openMin, closeMin, occupied) {
@@ -270,15 +356,15 @@
       try {
         const data = await fetchJson(item.url, item.headers);
         if (data && data.days && typeof data.days === "object") {
-          (item.remote ? remote : local).push(data);
+          // Birinchi muvaffaqiyatli manba kifoya — boshqa manbalarni so'rash
+          // GitHub API limitiga chopilish va ESKIRGAN nusxa olish xavfini beradi
+          return data;
         }
       } catch (err) {
         lastErr = err.message || lastErr;
       }
     }
-    const pool = remote.concat(local);
-    if (!pool.length) throw new Error(lastErr);
-    return pickSnapshot(pool);
+    throw new Error(lastErr);
   }
 
   function occupancyCount(snap) {
@@ -290,29 +376,6 @@
 
   function snapshotTime(snap) {
     return Date.parse((snap && snap.updated_at) || "") || 0;
-  }
-
-  function pickSnapshot(pool) {
-    pool.sort((a, b) => {
-      const ta = snapshotTime(a);
-      const tb = snapshotTime(b);
-      const oa = occupancyCount(a);
-      const ob = occupancyCount(b);
-      const aliveA = oa > 0 || ta > 0 ? 1 : 0;
-      const aliveB = ob > 0 || tb > 0 ? 1 : 0;
-      if (aliveB !== aliveA) return aliveB - aliveA;
-      if (tb !== ta) return tb - ta;
-      return ob - oa;
-    });
-    const newest = pool[0];
-    const richest = pool.slice().sort((a, b) => {
-      const d = occupancyCount(b) - occupancyCount(a);
-      return d !== 0 ? d : snapshotTime(b) - snapshotTime(a);
-    })[0];
-    if (occupancyCount(newest) === 0 && occupancyCount(richest) > 0 && snapshotTime(newest) <= snapshotTime(richest)) {
-      return richest;
-    }
-    return newest;
   }
 
   function mergeIncomingSnapshot(incoming) {
@@ -386,7 +449,7 @@
     const snap = state.snapshot || {};
     const openMin = Number(snap.open_min || 0);
     const closeMin = Number(snap.close_min || 1440);
-    const occupied = normalizeOccupied(((snap.days || {})[date] || {}).occupied || []);
+    const occupied = effectiveOccupied(date);
     return {
       date,
       open_min: openMin,
@@ -400,6 +463,7 @@
 
   function applyLocalBooking() {
     if (state.start == null || state.end == null || !state.date) return;
+    addLocalPending(state.date, state.start, state.end);
     const occ = {
       start_min: Number(state.start),
       end_min: Number(state.end),
@@ -418,7 +482,8 @@
   function paintSlots(payload) {
     const openMin = Number(payload.open_min || 0);
     const closeMin = Number(payload.close_min || 1440);
-    const occupied = normalizeOccupied(payload.occupied || []);
+    const base = normalizeOccupied(payload.occupied || []);
+    const occupied = base.concat(pendingExtras(payload.date || state.date, base));
     state.slots = {
       date: payload.date || state.date,
       open_min: openMin,
@@ -506,28 +571,58 @@
     green: { bg: "rgba(34,197,94,0.34)", fg: "#dcfce7", bar: "#22c55e" },
     blue: { bg: "rgba(37,99,235,0.5)", fg: "#dbeafe", bar: "#3b82f6" },
     red: { bg: "rgba(220,38,38,0.52)", fg: "#fecaca", bar: "#ef4444" },
-    orange: { bg: "rgba(234,88,12,0.55)", fg: "#ffedd5", bar: "#f97316" },
+    orange: { bg: "rgba(251,191,36,0.45)", fg: "#fef9c3", bar: "#f59e0b" },
+    amber: { bg: "rgba(251,191,36,0.45)", fg: "#fef9c3", bar: "#f59e0b" },
     past: { bg: "#2a2d2b", fg: "#9ca3af", bar: "#6b7280" },
   };
 
   function dayOccupancyColor(date) {
-    const occupied = normalizeOccupied((((state.snapshot || {}).days || {})[date] || {}).occupied || []);
+    const occupied = effectiveOccupied(date);
     if (!occupied.length) return "";
     const closeMin = Number((state.snapshot && state.snapshot.close_min) || 1440);
-    const colors = new Set(occupied.map((b) => hourColor(Math.floor(b.start_min / 60), occupied, closeMin)));
+    const nowMin = effectiveNowMin(date);
+    const colors = new Set();
+    for (const b of occupied) {
+      // Bron qamrab olgan BARCHA soatlarni tekshiramiz (faqat hali o'tmaganlarini)
+      const first = Math.floor(b.start_min / 60);
+      const last = Math.floor((b.end_min - 1) / 60);
+      for (let h = first; h <= last; h += 1) {
+        const hourSlot = { start_min: h * 60, end_min: h * 60 + 60 };
+        if (isHourPast(hourSlot, nowMin)) continue;
+        colors.add(hourColor(h, occupied, closeMin));
+      }
+    }
     if (colors.has("red")) return "busy-red";
-    if (colors.has("orange")) return "busy-orange";
+    if (colors.has("amber") || colors.has("orange")) return "busy-amber";
     if (colors.has("blue")) return "busy-blue";
-    return "busy-blue";
+    return "";
   }
 
   function colorLabel(color) {
     return STATUS[color] || color;
   }
 
+  // Snapshot qanchalik yangi? (ms) — eskirgan bo'lsa foydalanuvchini ogohlantiramiz
+  function snapshotAgeMs() {
+    return Date.now() - (snapshotTime(state.snapshot) || 0);
+  }
+
+  function isSnapshotStale() {
+    if (!state.snapshot) return false;
+    const age = snapshotAgeMs();
+    return age > 15 * 60 * 1000;
+  }
+
+  function updateStaleBanner() {
+    const el = $("staleBanner");
+    if (!el) return;
+    el.hidden = !isSnapshotStale();
+  }
+
   function renderHours() {
     const box = $("hours");
     box.innerHTML = "";
+    updateStaleBanner();
     const d = parseYmd(state.date);
     $("dayTitle").textContent = `${DAYS_FULL[d.getDay()]}, ${d.getDate()}-${MONTHS[d.getMonth()]}`;
     if (dateIsRest(state.date) && !dateFullyPast(state.date)) {
@@ -540,6 +635,7 @@
     const fullyPast = dateFullyPast(state.date);
     for (const h of (state.slots && state.slots.hours) || []) {
       const past = fullyPast || isHourPast(h, nowMin);
+      const inplay = !past && nowMin >= 0 && h.start_min <= nowMin && nowMin < h.end_min;
       const color = past ? "past" : h.color;
       const paint = HOUR_PAINT[color] || HOUR_PAINT.green;
       const inRange = !past && start != null && end != null && h.start_min < end && start < h.end_min;
@@ -550,7 +646,17 @@
       btn.style.background = paint.bg;
       btn.style.color = paint.fg;
       btn.style.boxShadow = `inset 5px 0 0 ${paint.bar}`;
-      btn.innerHTML = `<div class="t">${h.label}</div><div class="s">${past ? "O'tib ketgan" : colorLabel(h.color)}</div>`;
+      // Soat ostida band vaqtlar ma'lumoti (masalan: 08:00–09:00 band)
+      const busyList = (state.slots.occupied || [])
+        .filter((o) => o.start_min < h.end_min && h.start_min < o.end_min)
+        .map((o) => `${hhmm(Math.max(o.start_min, h.start_min))}–${hhmm(Math.min(o.end_min, h.end_min))}${o.status === "confirmed" ? " (band)" : ""}`)
+        .slice(0, 2);
+      let sub;
+      if (past) sub = "O'tib ketgan";
+      else if (busyList.length) sub = busyList.join(", ");
+      else if (inplay) sub = "⚡ Jarayonda";
+      else sub = colorLabel(h.color);
+      btn.innerHTML = `<div class="t">${h.label}</div><div class="s">${sub}</div>`;
       btn.addEventListener("click", () => onHourClick(h, past));
       box.appendChild(btn);
     }
@@ -577,8 +683,8 @@
       toast("Bu soat band. Boshqa vaqt tanlang.");
       return;
     }
-    if (h.color === "orange") {
-      toast("Bu soat kutilmoqda. Boshqa vaqt tanlang yoki admin bilan bog'laning.");
+    if (h.color === "orange" || h.color === "amber") {
+      toast("Bu soat to'lov kutilmoqda. Boshqa vaqt tanlang yoki admin bilan bog'laning.");
       return;
     }
     const start = firstFreeStart(h.start_min, h.end_min);
