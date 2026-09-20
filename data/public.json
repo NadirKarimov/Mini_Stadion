@@ -15,7 +15,7 @@
     5,
     6
   ],
-  "updated_at": "2026-09-21T01:56:05.658113+05:00",
+  "updated_at": "2026-09-21T01:56:49.337071+05:00",
   "days": {
     "2026-09-21": {
       "occupied": [],
@@ -417,7 +417,13 @@
       ]
     },
     "2026-09-24": {
-      "occupied": [],
+      "occupied": [
+        {
+          "start_min": 420,
+          "end_min": 480,
+          "status": "pending_payment"
+        }
+      ],
       "hours": [
         {
           "hour": 6,
@@ -431,7 +437,7 @@
           "start_min": 420,
           "end_min": 480,
           "label": "07:00/07:59",
-          "color": "green"
+          "color": "orange"
         },
         {
           "hour": 8,
